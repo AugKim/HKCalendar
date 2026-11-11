@@ -1,0 +1,16 @@
+{
+  "name": "Lịch Phụng Vụ Công Giáo",
+  "short_name": "Lịch Phụng Vụ",
+  "description": "Lịch phụng vụ Công Giáo Việt Nam: bài đọc, âm lịch, Tết, ăn chay kiêng thịt.",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f5f0",
+  "theme_color": "#f7f5f0",
+  "icons": [
+    {"src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

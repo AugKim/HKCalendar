@@ -101,9 +101,9 @@
     const parts = s.split(/,\s*/);
     s = parts.map((p, i) => {
       if (!isUpper(p)) return p;
-      return i === 0 ? titleCase(p) : p.toLocaleLowerCase('vi').replace(/hội thánh/g, 'Hội Thánh');
+      return i === 0 ? titleCase(p) : p.toLocaleLowerCase('vi').replace(/hội thánh/g, 'Hội Thánh').replace(/mẹ thiên chúa/g, 'Mẹ Thiên Chúa').replace(/thiên chúa/g, 'Thiên Chúa');
     }).join(', ');
-    s = s.replace(/^Đức Đức/, 'Đức').replace(/\bmaria\b/g, 'Maria').replace(/\bgiuse\b/g, 'Giuse');
+    s = s.replace(/Đức Đức/g, 'Đức').replace(/\bmaria\b/g, 'Maria').replace(/\bgiuse\b/g, 'Giuse');
     if (/^Cầu cho/i.test(s)) s = s.charAt(0) + s.slice(1).toLocaleLowerCase('vi');
     if (NAME_FIX[s]) s = NAME_FIX[s];
     if (s.length > 1 && /^[a-zà-ỹ]/.test(s)) s = s.charAt(0).toLocaleUpperCase('vi') + s.slice(1);

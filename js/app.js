@@ -15,8 +15,29 @@
   // Các bảng dữ liệu khai báo bằng const/let không nằm trên window → đọc qua typeof
   const G = n => { try { return (0, eval)('typeof ' + n + " !== 'undefined' ? " + n + ' : undefined'); } catch (e) { return undefined; } };
   P.setSanctoral(G('SAINTS_DATA'));
-  const todayN = u.fromDate(new Date());
-  const state = { view: 'month', y: 0, m: 0, sel: todayN, fs: 1, tab: null, setIdx: 0 };
+  let todayN = u.fromDate(new Date());
+  const state = { view: 'month', y: 0, m: 0, sel: todayN, fs: 1, tab: null, setIdx: 0, tr: 'vn' };
+
+  // Các bản dịch có thể chọn khi xem bài đọc. 'vn' = bản văn có sẵn trong dữ liệu Sách Bài Đọc.
+  // Muốn thêm bản dịch: đặt file cùng định dạng với Reading/translation_2.json và thêm một dòng ở đây.
+  const TRANSLATIONS = [
+    { id: 'vn', label: 'Sách Bài Đọc' },
+    { id: 't2', label: 'English', file: 'Reading/translation_2.json', lang: 'en' }
+  ];
+  const trData = new Map(), trLoading = new Map();
+  function loadTranslation(id) {
+    const t = TRANSLATIONS.find(x => x.id === id);
+    if (!t || !t.file) return Promise.resolve(null);
+    if (trData.has(id)) return Promise.resolve(trData.get(id));
+    if (!trLoading.has(id)) {
+      const p = fetch(t.file).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(j => { trData.set(id, j); return j; })
+        .finally(() => trLoading.delete(id));
+      trLoading.set(id, p);
+    }
+    return trLoading.get(id);
+  }
+  const YEAR_MIN = 1583, YEAR_MAX = 9000;   // lịch Gregory
   const MONTHS = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
   const isNarrow = () => window.matchMedia('(max-width: 1100px)').matches;
 
@@ -41,7 +62,7 @@
       READINGS_DATA: g('READINGS_DATA'), READINGS_SUNDAY: g('READINGS_SUNDAY'), READINGS_SEASONAL: g('READINGS_SEASONAL'),
       READINGS_ORDINARY_Y1: g('READINGS_ORDINARY_Y1'), READINGS_ORDINARY_Y2: g('READINGS_ORDINARY_Y2'),
       READINGS_SPECIAL: g('READINGS_SPECIAL'), OptionsaintReadings: g('OptionsaintReadings'),
-      MEDITATION_LINKS: g('MEDITATION_LINKS'), MEDITATION_BY_CODE: g('MEDITATION_BY_CODE')
+      MEDITATION_LINKS: g('MEDITATION_LINKS'), MEDITATION_BY_CODE: g('MEDITATION_BY_CODE'), MEDITATIONS: g('MEDITATIONS')
     };
   }
   const readingsApi = () => window.Readings.make(tables());
@@ -155,8 +176,10 @@
   }
 
   const isOpen = () => !$('#detail').hidden;
-  function openSheet() { const d = $('#detail'); d.hidden = false; $('#scrim').hidden = false; document.body.style.overflow = 'hidden'; renderDetail(); d.scrollTop = 0; const c = $('#dClose'); if (c) c.focus(); }
-  function closeSheet() { if (!isOpen()) return; $('#detail').hidden = true; $('#scrim').hidden = true; document.body.style.overflow = ''; token++; const b = $('[data-n="' + state.sel + '"]', $('#calendar')); if (b) b.focus({ preventScroll: true }); }
+  // Phần nền phía sau khung chi tiết không nhận focus/nhấp khi khung đang mở
+  const setBackdropInert = on => $$('.skip, .topbar, #main').forEach(el => { el.inert = on; });
+  function openSheet() { const d = $('#detail'); d.hidden = false; $('#scrim').hidden = false; setBackdropInert(true); document.body.style.overflow = 'hidden'; renderDetail(); d.scrollTop = 0; const c = $('#dClose'); if (c) c.focus(); }
+  function closeSheet() { if (!isOpen()) return; $('#detail').hidden = true; $('#scrim').hidden = true; setBackdropInert(false); document.body.style.overflow = ''; token++; const b = $('[data-n="' + state.sel + '"]', $('#calendar')); if (b) b.focus({ preventScroll: true }); }
 
   let peekToken = 0;
   function refsFor(info, R) {
@@ -188,9 +211,12 @@
       '<div class="pk-main"><div class="chips">' + chips.join('') + '</div><h2>' + esc(p.name) + '</h2><div class="pk-week">' + esc(i.week) + ' · ' + esc(i.seasonName) + '</div>' + extra +
       '<dl class="pk-refs" id="pkRefs"><dt>Bài đọc</dt><dd><div class="skeleton"></div></dd></dl></div>' +
       '<div class="pk-act"><button type="button" class="btn btn-primary pk-open" id="peekOpen">Xem đầy đủ &amp; bài đọc</button><div class="pk-nav"><button type="button" class="icon-btn" data-pstep="-1" aria-label="Ngày trước">‹</button><button type="button" class="icon-btn" data-pstep="1" aria-label="Ngày sau">›</button></div></div>';
-    ensure(window.Readings.filesNeeded(i).concat(['readingdata.js'])).then(() => {
+    ensure(window.Readings.filesNeeded(i).concat(['readingdata.js', 'meditations.js'])).then(() => {
       if (my !== peekToken) return;
-      const box = $('#pkRefs'); if (box) box.innerHTML = refsHTML(refsFor(i, readingsApi()));
+      const R = readingsApi();
+      const box = $('#pkRefs'); if (box) box.innerHTML = refsHTML(refsFor(i, R));
+      const med = R.meditationFor(R.build(i).tabs[0], 0);
+      if (med && med.theme && box) box.insertAdjacentHTML('beforebegin', '<p class="pk-med"><b>Ý chính:</b> ' + esc(med.theme) + '</p>');
     }).catch(() => { const box = $('#pkRefs'); if (my === peekToken && box) box.innerHTML = '<dt></dt><dd class="rd-miss" style="margin:0">Không tải được dữ liệu bài đọc.</dd>'; });
   }
 
@@ -228,6 +254,7 @@
 
     // bài đọc
     body += '<div class="sec"><h4>Bài đọc</h4><div id="readings"><div class="rd-loading"><div class="skeleton" style="width:40%"></div><div class="skeleton"></div><div class="skeleton" style="width:85%"></div></div></div></div>';
+    body += '<div class="sec" id="medSec" hidden><h4>Gợi ý suy niệm</h4><div id="meditation"></div></div>';
 
     const prevTitle = 'Ngày trước', nextTitle = 'Ngày sau';
     $('#detail').innerHTML =
@@ -238,7 +265,7 @@
       '<div class="d-body">' + body + '</div>';
 
     const info = i;
-    const files = window.Readings.filesNeeded(info).concat(['readingdata.js', 'meditationLinks.js', 'eucharisticAdoration.js']);
+    const files = window.Readings.filesNeeded(info).concat(['readingdata.js', 'meditationLinks.js', 'eucharisticAdoration.js', 'meditations.js']);
     ensure(files).then(() => {
       if (my !== token) return;
       renderReadings(info);
@@ -285,6 +312,40 @@
     h += readingBlock('Tin Mừng', data.gospel);
     return h;
   }
+  // Bài đọc theo bản dịch khác: lấy câu theo trích dẫn. Phần nào không tìm được thì giữ bản Sách Bài Đọc.
+  function setHTMLTr(data, T, tr, cycle) {
+    if (!data) return { html: '', plain: '' };
+    const opts = data.summaryOnly ? { hebrew: true } : null;   // trích dẫn tóm tắt đánh số Thánh vịnh theo Híp-ri
+    const lang = tr.lang ? ' lang="' + tr.lang + '"' : '';
+    const html = [], plain = [], miss = [];
+    const one = (label, d, isPs) => {
+      if (!d || !d.excerpt) return;
+      const ref = d.content || (d.verses || []).join(' ');
+      let cite = d.excerpt;
+      const byYear = cite.match(new RegExp('\\(' + cycle + '\\)\\s*([^;:()]+)'));   // "(A)Mt 28, 1-10; (B) Mc 16,1-8: (C)…"
+      if (byYear) cite = byYear[1].trim();
+      const r = window.Bible.lookupBest(T, cite, opts, byYear ? '' : ref);
+      if (!r.ok) {
+        miss.push(label);
+        html.push(isPs ? psalmBlock(d) : readingBlock(label, d));
+        return;
+      }
+      const verse = x => '<sup class="vno">' + x.v + '</sup>' + esc(x.text);
+      const body = isPs
+        ? r.stanzas.map(st => '<p class="rd-verse">' + st.map(verse).join(' ') + '</p>').join('')
+        : '<div class="rd-text">' + r.stanzas.map(st => '<p>' + st.map(verse).join(' ') + '</p>').join('') + '</div>';
+      html.push('<div class="rd-block"' + lang + '><div class="rd-label">' + label + '</div><div class="rd-cite">' + esc(cite) + '</div>' + body + '</div>');
+      plain.push(label.toUpperCase() + ' — ' + cite + '\n' + r.stanzas.map(st => st.map(x => x.text).join(' ')).join('\n'));
+    };
+    one('Bài đọc I', data.firstReading);
+    one('Đáp ca', data.psalms, true);
+    one('Bài đọc II', data.secondReading);
+    one('Tin Mừng', data.gospel);
+    let note = '<div class="tr-note">Bản dịch: ' + esc(tr.label) + '. Số câu đã quy đổi theo cách đánh số của bản dịch này; phần Đáp ca chỉ có các câu Thánh vịnh, không có câu đáp.</div>';
+    if (miss.length) note += '<div class="rd-miss">Chưa tìm được trong bản dịch này nên đang hiện theo Sách Bài Đọc: ' + esc(miss.join(', ')) + '.</div>';
+    return { html: note + html.join(''), plain: plain.join('\n\n') };
+  }
+
   function plainText(data) {
     const parts = [];
     const blk = (l, d) => { if (d) parts.push([l + (d.excerpt ? ' — ' + d.excerpt : ''), d.title, d.info, d.content, d.end].filter(Boolean).join('\n')); };
@@ -294,6 +355,19 @@
     if (data.alleluia) parts.push(['TUNG HÔ TIN MỪNG', data.alleluia.verse, data.alleluia.content].filter(Boolean).join('\n'));
     blk('TIN MỪNG', data.gospel);
     return parts.join('\n\n');
+  }
+
+  function meditationHTML(med, data) {
+    const cite = k => { const d = data && data[k]; return d && d.excerpt ? ' <span class="med-cite">' + esc(d.excerpt.replace(/[:.\s]+$/, '')) + '</span>' : ''; };
+    const parts = [['Bài đọc I', 'first', 'firstReading'], ['Đáp ca', 'psalm', 'psalms'], ['Bài đọc II', 'second', 'secondReading'], ['Tin Mừng', 'gospel', 'gospel']]
+      .filter(x => med[x[1]]).map(x => '<dt>' + x[0] + cite(x[2]) + '</dt><dd>' + esc(med[x[1]]) + '</dd>').join('');
+    const box = (cls, title, text) => text ? '<div class="med-box ' + cls + '"><h5>' + title + '</h5><p>' + esc(text) + '</p></div>' : '';
+    return (med.theme ? '<p class="med-theme">' + esc(med.theme) + '</p>' : '') +
+      (parts ? '<dl class="med-parts">' + parts + '</dl>' : '') +
+      box('med-connect', 'Nối kết các bài đọc', med.connect) +
+      box('', 'Câu hỏi gợi suy', med.question) +
+      box('', 'Sống Lời Chúa', med.action) +
+      '<p class="med-foot">Gợi ý mang tính hỗ trợ cầu nguyện cá nhân, không thay thế bài giảng.</p>';
   }
 
   function expandSets(sets) {
@@ -316,14 +390,28 @@
     if (state.setIdx >= cur.sets.length) state.setIdx = 0;
     const set = cur.sets[state.setIdx];
 
-    let h = '';
-    if (res.summary && !cur.full) { /* trích dẫn đã nằm trong khối bên dưới */ }
+    const tr = TRANSLATIONS.find(t => t.id === state.tr) || TRANSLATIONS[0];
+    let h = '<div class="opts tr-switch" role="group" aria-label="Chọn bản dịch"><span>Bản dịch:</span>' +
+      TRANSLATIONS.map(t => '<button type="button" data-tr="' + t.id + '" aria-pressed="' + (t.id === tr.id) + '">' + esc(t.label) + '</button>').join('') + '</div>';
     if (tabs.length > 1) h += '<div class="tabs" role="tablist">' + tabs.map(t => '<button role="tab" data-tab="' + t.id + '" aria-selected="' + (t.id === state.tab) + '">' + esc(t.label) + '</button>').join('') + '</div>';
     if (cur.sets.length > 1) h += '<div class="opts">' + cur.sets.map((s, k) => '<button data-set="' + k + '" aria-pressed="' + (k === state.setIdx) + '">' + esc(s.label || ('Lựa chọn ' + (k + 1))) + '</button>').join('') + '</div>';
-    h += setHTML(set.data);
+    let plainTr = null;
+    if (tr.file && !trData.has(tr.id)) {
+      h += '<div class="rd-loading"><div class="skeleton" style="width:40%"></div><div class="skeleton"></div><div class="skeleton" style="width:85%"></div></div>';
+      const n = info.n;
+      loadTranslation(tr.id).then(() => { if (state.sel === n && state.tr === tr.id) renderReadings(info); })
+        .catch(() => { toast('Không tải được bản dịch ' + tr.label + '.'); if (state.tr === tr.id) { state.tr = 'vn'; renderReadings(info); } });
+    } else if (tr.file) {
+      const out = setHTMLTr(set.data, trData.get(tr.id), tr, info.cycle);
+      h += out.html; plainTr = out.plain;
+    } else h += setHTML(set.data);
     h += '<div class="rd-tools"><button class="btn" id="btnCopy">Sao chép bài đọc</button>' + (med ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(med.url) + '">' + esc(med.label || 'Suy niệm') + '</a>' : '') + '</div>';
+    const sugg = R.meditationFor(cur, state.setIdx);
+    if (sugg) h = h.replace('<div class="rd-tools">', '<div class="rd-tools"><button class="btn" id="btnMed">Gợi ý suy niệm ↓</button>');
     box.innerHTML = h;
-    box._plain = set.data && !set.data.summaryOnly ? plainText(set.data) : '';
+    box._plain = plainTr != null ? plainTr : (set.data && !set.data.summaryOnly ? plainText(set.data) : '');
+    const ms = $('#medSec');
+    if (ms) { ms.hidden = !sugg; $('#meditation').innerHTML = sugg ? meditationHTML(sugg, set.data) : ''; }
   }
 
   // ------------------------------------------------------------------ xuất lịch
@@ -331,17 +419,24 @@
     const sel = $('input[name="range"]:checked').value;
     if (sel === 'month') return [state.y, state.m, state.y, state.m];
     if (sel === 'year') return [state.y, 1, state.y, 12];
-    const f = Number($('#exFrom').value), t = Number($('#exTo').value);
-    return [state.y, Math.min(f, t), state.y, Math.max(f, t)];
+    const parse = v => { const mt = /^(\d{4})-(\d{2})$/.exec(v || ''); return mt ? [+mt[1], +mt[2]] : null; };
+    let f = parse($('#exFrom').value), t = parse($('#exTo').value);
+    if (!f || !t) throw new Error('Hãy chọn đủ tháng bắt đầu và kết thúc.');
+    if (f[0] * 12 + f[1] > t[0] * 12 + t[1]) [f, t] = [t, f];
+    if (f[0] < YEAR_MIN || t[0] > YEAR_MAX) throw new Error('Chỉ xuất được từ năm ' + YEAR_MIN + ' đến ' + YEAR_MAX + '.');
+    if ((t[0] * 12 + t[1]) - (f[0] * 12 + f[1]) >= EXPORT_MAX_MONTHS) throw new Error('Mỗi lần xuất tối đa ' + EXPORT_MAX_MONTHS / 12 + ' năm.');
+    return [f[0], f[1], t[0], t[1]];
   }
+  const EXPORT_MAX_MONTHS = 120;
+  const monthsIn = r => { const out = []; for (let k = r[0] * 12 + r[1] - 1; k <= r[2] * 12 + r[3] - 1; k++) out.push([Math.floor(k / 12), k % 12 + 1]); return out; };
   async function buildExport(range, opts) {
     if (opts.text) await ensure(['Sunday.js', 'DailySeason.js', 'readings_year_1.js', 'readings_year_2.js', 'SaintsBible.js', 'Optionsaint.js', 'readingdata.js']);
     else await ensure(['readingdata.js']);
     const R = readingsApi(), months = [];
-    for (let m = range[1]; m <= range[3]; m++) {
-      const days = [], len = u.civ(u.mk(m === 12 ? range[0] + 1 : range[0], m === 12 ? 1 : m + 1, 1) - 1).d;
+    monthsIn(range).forEach(([y, m]) => {
+      const days = [], len = u.civ(u.mk(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1) - 1).d;
       for (let d = 1; d <= len; d++) {
-        const i = P.day(u.mk(range[0], m, d)), p = i.primary;
+        const i = P.day(u.mk(y, m, d)), p = i.primary;
         const o = { ngay: i.iso, thu: i.dowName, le: p.name, bac: p.gradeLabel, mau: p.colorName, tuan: i.week, mua: i.seasonName, nam: i.cycle, namChanLe: i.weekdayCycle === '1' ? 'lẻ' : 'chẵn', maBaiDoc: i.code };
         if (opts.lunar) o.amLich = i.lunar.day + '/' + i.lunar.month + (i.lunar.leap ? ' nhuận' : '');
         if (opts.saints) { const ex = i.optionals.map(x => x.name).concat(i.others.filter(x => x.role !== 'season').map(x => x.name)); if (ex.length) o.khac = ex; }
@@ -353,9 +448,11 @@
         }
         days.push(o);
       }
-      months.push({ thang: m, ngay: days });
-    }
-    return { nam: range[0], taoLuc: new Date().toISOString(), thang: months };
+      months.push({ nam: y, thang: m, ngay: days });
+    });
+    const out = { nam: range[0], taoLuc: new Date().toISOString(), thang: months };
+    if (range[2] !== range[0]) out.denNam = range[2];
+    return out;
   }
   function download(name, text, type) {
     const a = document.createElement('a'), blob = new Blob([text], { type });
@@ -363,9 +460,10 @@
   }
   function printHTML(data, opts) {
     const colors = { 'Xanh': '#3f8d5c', 'Tím': '#7352ad', 'Trắng': '#d4b85c', 'Đỏ': '#c4433a', 'Hồng': '#e0809f' };
-    let h = '<!doctype html><meta charset="utf-8"><title>Lịch Phụng Vụ ' + data.nam + '</title><style>body{font:12px/1.4 system-ui,sans-serif;margin:18px;color:#111}h1{font-size:18px}h2{font-size:15px;margin:18px 0 6px;break-after:avoid}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:top;text-align:left}th{background:#f1eee6}.d{white-space:nowrap}.c{width:8px;padding:0}.s{color:#c4433a;font-weight:600}tr{break-inside:avoid}small{color:#666}</style><h1>Lịch Phụng Vụ Công Giáo — ' + data.nam + '</h1>';
+    const yrs = data.nam + (data.denNam ? '–' + data.denNam : '');
+    let h = '<!doctype html><meta charset="utf-8"><title>Lịch Phụng Vụ ' + yrs + '</title><style>body{font:12px/1.4 system-ui,sans-serif;margin:18px;color:#111}h1{font-size:18px}h2{font-size:15px;margin:18px 0 6px;break-after:avoid}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:top;text-align:left}th{background:#f1eee6}.d{white-space:nowrap}.c{width:8px;padding:0}.s{color:#c4433a;font-weight:600}tr{break-inside:avoid}small{color:#666}</style><h1>Lịch Phụng Vụ Công Giáo — ' + yrs + '</h1>';
     data.thang.forEach(mo => {
-      h += '<h2>Tháng ' + mo.thang + '</h2><table><tr><th></th><th>Ngày</th>' + (opts.lunar ? '<th>Âm</th>' : '') + '<th>Cử hành</th><th>Tuần</th>' + (opts.refs ? '<th>Bài đọc</th>' : '') + '</tr>';
+      h += '<h2>Tháng ' + mo.thang + (data.denNam ? ', ' + mo.nam : '') + '</h2><table><tr><th></th><th>Ngày</th>' + (opts.lunar ? '<th>Âm</th>' : '') + '<th>Cử hành</th><th>Tuần</th>' + (opts.refs ? '<th>Bài đọc</th>' : '') + '</tr>';
       mo.ngay.forEach(o => {
         const d = o.ngay.slice(8), sun = o.thu === 'Chúa Nhật';
         const refs = o.thamChieu ? [o.thamChieu.first, o.thamChieu.psalm, o.thamChieu.second, o.thamChieu.gospel].filter(Boolean).join(' · ') : '';
@@ -378,11 +476,14 @@
   }
   async function doExport(kind) {
     const opts = { lunar: $('#exLunar').checked, saints: $('#exSaints').checked, refs: $('#exRefs').checked, text: $('#exText').checked && kind === 'json' };
-    const r = monthRange();
+    let r;
+    try { r = monthRange(); } catch (e) { toast(e.message); return; }
     toast('Đang chuẩn bị…');
     try {
       const data = await buildExport(r, opts);
-      const base = 'lich-phung-vu-' + r[0] + (r[1] === r[3] ? '-thang-' + r[1] : (r[1] === 1 && r[3] === 12 ? '' : '-thang-' + r[1] + '-den-' + r[3]));
+      const base = 'lich-phung-vu-' + (r[0] === r[2]
+        ? r[0] + (r[1] === r[3] ? '-thang-' + r[1] : (r[1] === 1 && r[3] === 12 ? '' : '-thang-' + r[1] + '-den-' + r[3]))
+        : r[0] + '-' + u.pad2(r[1]) + '-den-' + r[2] + '-' + u.pad2(r[3]));
       if (kind === 'json') { download(base + '.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8'); toast('Đã tải ' + base + '.json'); }
       else {
         const w = window.open('', '_blank');
@@ -432,7 +533,10 @@
       const st = e.target.closest('[data-step]'); if (st) { select(state.sel + Number(st.dataset.step)); return; }
       if (e.target.closest('#dClose')) { closeSheet(); return; }
       const tb = e.target.closest('[data-tab]'); if (tb) { state.tab = tb.dataset.tab; state.setIdx = 0; renderReadings(P.day(state.sel)); return; }
+      const trb = e.target.closest('[data-tr]');
+      if (trb) { state.tr = trb.dataset.tr; store.set('tr', state.tr); renderReadings(P.day(state.sel)); return; }
       const sb = e.target.closest('[data-set]'); if (sb) { state.setIdx = Number(sb.dataset.set); renderReadings(P.day(state.sel)); return; }
+      if (e.target.closest('#btnMed')) { const ms = $('#medSec'); if (ms) ms.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       if (e.target.closest('#btnCopy')) {
         const t = $('#readings')._plain; if (!t) { toast('Chưa có bản văn để sao chép.'); return; }
         const i = P.day(state.sel);
@@ -444,7 +548,12 @@
     $('#nextPeriod').addEventListener('click', () => step(1));
     $('#btnToday').addEventListener('click', goToday);
     $('#viewSwitch').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
-    $('#jumpDate').addEventListener('change', e => { const v = e.target.value; if (!v) return; const [y, m, d] = v.split('-').map(Number); select(u.mk(y, m, d), { rerender: true }); });
+    $('#jumpDate').addEventListener('change', e => {
+      const mt = /^(\d{4,})-(\d{2})-(\d{2})$/.exec(e.target.value); if (!mt) return;
+      const y = +mt[1], m = +mt[2], d = +mt[3];
+      if (y < YEAR_MIN || y > YEAR_MAX) { toast('Chỉ xem được từ năm ' + YEAR_MIN + ' đến ' + YEAR_MAX + '.'); return; }
+      select(u.mk(y, m, d), { rerender: true });
+    });
     $('#fontInc').addEventListener('click', () => setFont(state.fs + 0.1));
     $('#fontDec').addEventListener('click', () => setFont(state.fs - 0.1));
     $('#btnTheme').addEventListener('click', () => {
@@ -452,9 +561,8 @@
       const next = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = next; store.set('theme', next);
     });
     $('#btnExport').addEventListener('click', () => {
-      const f = $('#exFrom'), t = $('#exTo');
-      if (!f.options.length) { MONTHS.forEach((n, k) => { f.add(new Option(n, k + 1)); t.add(new Option(n, k + 1)); }); }
-      f.value = state.m; t.value = state.m;
+      const cur = state.y + '-' + u.pad2(state.m);
+      $('#exFrom').value = cur; $('#exTo').value = cur;
       $('#exportDlg').showModal();
     });
     $('#exJson').addEventListener('click', e => { e.preventDefault(); $('#exportDlg').close(); doExport('json'); });
@@ -466,6 +574,16 @@
       if (e.key === 't' || e.key === 'T') goToday();
     });
     window.addEventListener('hashchange', readHash);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshToday(); });
+    window.addEventListener('focus', refreshToday);
+    setInterval(refreshToday, 60000);
+  }
+
+  // Khi để trang mở qua nửa đêm: cập nhật ô "hôm nay"
+  function refreshToday() {
+    const n = u.fromDate(new Date());
+    if (n === todayN) return;
+    todayN = n; render();
   }
 
   function setFont(v) { state.fs = Math.max(0.9, Math.min(1.4, Math.round(v * 10) / 10)); document.documentElement.style.setProperty('--fs', state.fs); store.set('fs', state.fs); }
@@ -474,7 +592,7 @@
     const m = location.hash.match(/^#(\d{4})-(\d{2})-(\d{2})(?:\/(month|year|list))?/);
     if (!m) return false;
     const hy = +m[1], hm = +m[2], hd = +m[3];
-    if (hm < 1 || hm > 12 || hd < 1 || hd > u.civ(u.mk(hm === 12 ? hy + 1 : hy, hm === 12 ? 1 : hm + 1, 1) - 1).d || hy < 1583 || hy > 9000) return false;
+    if (hm < 1 || hm > 12 || hd < 1 || hd > u.civ(u.mk(hm === 12 ? hy + 1 : hy, hm === 12 ? 1 : hm + 1, 1) - 1).d || hy < YEAR_MIN || hy > YEAR_MAX) return false;
     const n = u.mk(hy, hm, hd);
     if (m[4]) state.view = m[4];
     if (n === state.sel && state.y === +m[1]) return true;
@@ -486,6 +604,7 @@
   // ------------------------------------------------------------------ khởi động
   function init() {
     const fs = parseFloat(store.get('fs')); if (fs) setFont(fs);
+    const tr = store.get('tr'); if (TRANSLATIONS.some(t => t.id === tr)) state.tr = tr;
     const v = store.get('view'); if (v === 'year' || v === 'list') state.view = v;
     const c = u.civ(todayN); state.y = c.y; state.m = c.m;
     bind();

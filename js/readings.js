@@ -100,6 +100,11 @@
 
       const prim = info.primary;
       const tem = temporalSets(info);
+      // Khóa tra gợi ý suy niệm (Reading/meditations.js)
+      const tc = info.code, sundayLike = info.sunday || SUNDAY_ALIAS[tc] || SUNDAY_DIRECT.has(tc);
+      const otWeekday = /^5\d{2}[1-6]$/.test(tc) && Number(tc.slice(1, 3)) <= 34;
+      const temKey = 'T' + tc + (sundayLike ? '-' + info.cycle : otWeekday ? '-' + info.weekdayCycle : '');
+      const mk = (pre, code) => (code ? { medKey: pre + code } : {});
       const temLabel = 'Bài đọc theo mùa';
       const SP = g('READINGS_SPECIAL');
 
@@ -117,27 +122,31 @@
         return d ? [{ label: null, data: d }] : null;
       }
 
-      const optData = optionSet(info.optionCode) || (prim.code === '8441' ? optionSet('8441') : null);
+      const ownOpt = optionSet(info.optionCode);
+      const optData = ownOpt || (prim.code === '8441' ? optionSet('8441') : null);
+      const optKey = ownOpt ? info.optionCode : '8441';
       const opt = optData ? [{ label: null, data: optData }] : null;
 
       const vigilSets = info.vigil ? [{ label: info.vigil.name, data: SP[info.vigil.code] || fromSummary(summaryOne(info.vigil.code, ['V', '0'])) }] : null;
 
-      if (prim.kind === 'tet' && tetTab) push('tet', 'tet', 'Thánh lễ Tết', tetTab);
+      if (prim.kind === 'tet' && tetTab) push('tet', 'tet', 'Thánh lễ Tết', tetTab, mk('S', tetCode));
       const gl = prim.grade === 'SOLEMNITY' ? 'trọng' : prim.grade === 'FEAST' ? 'kính' : 'nhớ';
       const optLeads = sancWins && !sanc && !!opt;
-      if (sancWins) push('sanctoral', 'sanctoral', 'Bài đọc lễ ' + gl, sanc || (optLeads ? opt : null));
-      push('temporal', 'temporal', temLabel, tem.sets);
-      if (!sancWins && sanc && (info.others.length || info.optionals.length || sancCode)) {
+      if (sancWins) push('sanctoral', 'sanctoral', 'Bài đọc lễ ' + gl, sanc || (optLeads ? opt : null), sanc ? mk('S', sancCode) : mk('O', optKey));
+      push('temporal', 'temporal', temLabel, tem.sets, { medKey: temKey });
+      // Lễ trọng của ngày đã dời đi (ví dụ Truyền Tin trùng Tuần Thánh) và không còn lễ thánh nào khác: không hiện bài đọc của nó ở ngày gốc
+      const onlyMovedAway = !!info.moved && !info.optionals.length && !info.others.some(o => o.kind === 'sanctoral' && o.role !== 'moved');
+      if (!sancWins && sanc && !onlyMovedAway && (info.others.length || info.optionals.length || sancCode)) {
         const hasFullSanc = sanc[0] && hasFull(sanc[0].data);
-        if (hasFullSanc || info.optionals.length || info.sanctoralCode) push('sanctoral', 'sanctoral', 'Bài đọc lễ thánh trong ngày', sanc);
+        if (hasFullSanc || info.optionals.length || info.sanctoralCode) push('sanctoral', 'sanctoral', 'Bài đọc lễ thánh trong ngày', sanc, mk('S', sancCode));
       }
       if (info.solemnOption) {
         const so = info.solemnOption, d = sanctoralSet(so.code, false, info.cycle) || optionSet(so.optionCode);
-        if (d) push('solemn', 'option', 'Kính trọng thể', [{ label: so.name, data: d }]);
+        if (d) push('solemn', 'option', 'Kính trọng thể', [{ label: so.name, data: d }], mk('S', so.code));
       }
-      if (opt && !optLeads) push('option', 'option', 'Bài đọc tùy chọn', opt);
-      if (prim.kind !== 'tet' && tetTab && tetCode) push('tet', 'tet', tetCode === '70815' ? 'Tết Trung Thu' : 'Thánh lễ Tết', tetTab);
-      if (vigilSets) push('vigil', 'vigil', info.vigil.name, vigilSets);
+      if (opt && !optLeads) push('option', 'option', 'Bài đọc tùy chọn', opt, mk('O', optKey));
+      if (prim.kind !== 'tet' && tetTab && tetCode) push('tet', 'tet', tetCode === '70815' ? 'Tết Trung Thu' : 'Thánh lễ Tết', tetTab, mk('S', tetCode));
+      if (vigilSets) push('vigil', 'vigil', info.vigil.name, vigilSets, mk('S', info.vigil.code));
 
       return { tabs, summary: summaryFor(info) };
     }
@@ -158,7 +167,14 @@
       return null;
     }
 
-    return { build, temporalSets, meditationLink, summaryFor };
+    /** Gợi ý suy niệm cho một tab (và bộ bài đọc thứ setIdx nếu tab có nhiều bộ). */
+    function meditationFor(tab, setIdx) {
+      const M = T.MEDITATIONS || {};
+      if (!tab || !tab.medKey) return null;
+      return M[tab.medKey + '#' + (setIdx || 0)] || M[tab.medKey] || null;
+    }
+
+    return { build, temporalSets, meditationLink, meditationFor, summaryFor };
   }
 
   // Các tệp dữ liệu lớn cần nạp cho một ngày (đường dẫn tương đối thư mục Reading/)

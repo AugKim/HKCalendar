@@ -38,7 +38,7 @@
       <button class="btn" id="btnToday" title="Về hôm nay (phím T)">Hôm nay</button>
       <label class="datejump" title="Đi tới ngày">
         <span class="sr">Đi tới ngày</span>
-        <input type="date" id="jumpDate" aria-label="Đi tới ngày">
+        <input type="date" id="jumpDate" aria-label="Đi tới ngày" min="1583-01-01" max="9000-12-31">
       </label>
       <div class="seg seg-small" role="group" aria-label="Cỡ chữ">
         <button id="fontDec" aria-label="Giảm cỡ chữ">A−</button>
@@ -88,7 +88,7 @@
         <label class="radio"><input type="radio" name="range" value="month" checked> Tháng đang xem</label>
         <label class="radio"><input type="radio" name="range" value="year"> Cả năm đang xem</label>
         <label class="radio"><input type="radio" name="range" value="custom"> Tuỳ chọn:
-          <span class="inline">từ tháng <select id="exFrom"></select> đến <select id="exTo"></select></span></label>
+          <span class="inline">từ <input type="month" id="exFrom" min="1583-01" max="9000-12" aria-label="Từ tháng"> đến <input type="month" id="exTo" min="1583-01" max="9000-12" aria-label="Đến tháng"></span></label>
       </fieldset>
       <fieldset>
         <legend>Nội dung</legend>
@@ -110,6 +110,7 @@
   <script src="js/lunar.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/readings.js"></script>
+  <script src="js/bible.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

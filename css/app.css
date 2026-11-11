@@ -167,6 +167,10 @@ body { --c: var(--green); }
 .opts { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 0; }
 .opts button { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
 .opts button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.tr-switch { align-items: center; margin-top: 4px; }
+.tr-switch > span { font-size: 12.5px; color: var(--muted); margin-right: 2px; }
+.tr-note { margin-top: 12px; font: 12.5px/1.5 var(--font-ui); color: var(--muted); }
+.vno { font: 600 0.62em var(--font-ui); color: var(--faint); margin: 0 3px 0 1px; vertical-align: super; line-height: 0; }
 #readings .tabs, #readings .opts, #readings .rd-tools { font-family: var(--font-ui); }
 #readings .tabs + .rd-block, #readings .opts + .rd-block, #readings > .rd-block:first-child { border-top: 0; padding-top: 6px; }
 .rd-block { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); font-family: var(--font-read); font-size: calc(21px * var(--fs)); line-height: 1.78; color: var(--ink); }
@@ -186,6 +190,18 @@ body { --c: var(--green); }
 @keyframes sk { to { background-position: -200% 0; } }
 .rd-tools { display: flex; gap: 8px; margin-top: 12px; }
 .rd-tools .btn { padding: 5px 11px; font-size: 13px; }
+.pk-med { margin: 6px 0 0; font-size: 13.5px; color: var(--ink); }
+.pk-med b { color: var(--brand); font-weight: 600; }
+#medSec { margin-top: 18px; border-top: 1px solid var(--line); }
+.med-theme { margin: 0 0 14px; font: italic 500 calc(20px * var(--fs))/1.5 var(--font-read); color: var(--ink); padding-left: 12px; border-left: 3px solid var(--brand); }
+.med-parts { margin: 0; display: grid; gap: 4px; }
+.med-parts dt { font: 700 12.5px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--brand); margin-top: 10px; }
+.med-cite { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); margin-left: 6px; }
+.med-parts dd, .med-box p { margin: 0; font: calc(17px * var(--fs))/1.65 var(--font-read); color: var(--ink); }
+.med-box { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.med-box.med-connect { border-color: color-mix(in srgb, var(--brand) 30%, var(--line)); }
+.med-box h5 { margin: 0 0 4px; font: 600 12px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.med-foot { margin: 14px 0 0; font-size: 12.5px; color: var(--faint); }
 
 /* ---------- khối tóm tắt ngày (trên đầu lịch) ---------- */
 .peek { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 22px; align-items: center; margin-bottom: 14px; padding: 16px 20px 16px 0; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 14%, var(--surface)), var(--surface) 60%); border: 1px solid var(--line); border-left: 6px solid var(--c); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -217,7 +233,7 @@ body { --c: var(--green); }
 .dlg footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 18px; }
 .radio, .check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .inline { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.dlg select { border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 6px; background: var(--surface); }
+.dlg select, .dlg input[type="month"] { border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 6px; background: var(--surface); }
 .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 60; box-shadow: var(--shadow); }
 
 /* ---------- đáp ứng ---------- */
