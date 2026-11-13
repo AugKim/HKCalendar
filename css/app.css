@@ -150,7 +150,6 @@ body { --c: var(--green); }
 .sec { padding-top: 16px; }
 .sec h4 { margin: 0 0 8px; font: 600 11.5px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .note { font-size: 13.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin: 0 0 8px; }
-.note.warn { border-color: color-mix(in srgb, var(--purple) 40%, var(--line)); }
 .oth { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .oth li { display: flex; gap: 8px; align-items: baseline; font-size: 14px; }
 .oth li .tag { flex: none; font-size: 11px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
@@ -181,6 +180,11 @@ body { --c: var(--green); }
 .rd-text { margin: 0; white-space: normal; text-align: justify; text-justify: inter-word; hyphens: auto; -webkit-hyphens: auto; }
 .rd-text p { margin: 0 0 .7em; text-indent: 0; }
 .rd-end { margin-top: 8px; font-style: italic; text-align: right; }
+.rd-text .rd-end { margin: 0 0 .7em; }
+/* Bài đọc thay thế ("Hoặc đọc: …") */
+.rd-alt { margin-top: 22px; padding: 14px 0 0 16px; border-left: 3px solid var(--line-strong); }
+.rd-alt-label { font: 700 12px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.rd-or { margin: 6px 0; text-align: center; font: italic 500 14px var(--font-ui); color: var(--muted); }
 .rd-resp { margin: 12px 0; text-align: center; padding: 8px 12px; border-left: 3px solid var(--brand); background: var(--surface-2); border-radius: 0 8px 8px 0; font-weight: 600; }
 .rd-verse { margin: .7em 0; text-align: justify; hyphens: auto; }
 .rd-alle { margin-top: 26px; padding: 16px 22px; font-family: var(--font-read); font-size: calc(21px * var(--fs)); line-height: 1.75; text-align: center; background: var(--surface-2); border-radius: 10px; border: 1px solid var(--line); }
@@ -188,7 +192,7 @@ body { --c: var(--green); }
 .rd-loading { margin-top: 18px; color: var(--muted); font-size: 14px; }
 .skeleton { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--surface-2), var(--line), var(--surface-2)); background-size: 200% 100%; animation: sk 1.2s infinite; margin: 10px 0; }
 @keyframes sk { to { background-position: -200% 0; } }
-.rd-tools { display: flex; gap: 8px; margin-top: 12px; }
+.rd-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .rd-tools .btn { padding: 5px 11px; font-size: 13px; }
 .pk-med { margin: 6px 0 0; font-size: 13.5px; color: var(--ink); }
 .pk-med b { color: var(--brand); font-weight: 600; }
@@ -268,5 +272,22 @@ body { --c: var(--green); }
   .pk-main h2 { font-size: 21px; }
   .pk-act { padding-left: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+/* Tìm lễ */
+.dlg-search { width: min(560px, calc(100vw - 24px)); max-height: min(80vh, 640px); }
+.dlg-search[open] { display: flex; flex-direction: column; }
+.srch-bar { display: flex; gap: 8px; align-items: center; padding: 8px 18px 10px; border-bottom: 1px solid var(--line); }
+.srch-bar input { flex: 1; min-width: 0; border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 12px; background: var(--surface-2); font-size: 16px; }
+.srch-year { display: flex; align-items: center; gap: 2px; font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+.srch-res { list-style: none; margin: 0; padding: 6px 10px 14px; overflow: auto; }
+.srch-hint { padding: 14px 8px; color: var(--muted); font-size: 14px; }
+.srch-item { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 8px; border-radius: 10px; border-left: 3px solid var(--c); }
+.srch-item:hover, .srch-item:focus-visible { background: var(--surface-2); }
+.srch-date { display: grid; min-width: 52px; line-height: 1.2; }
+.srch-date small, .srch-name small { color: var(--muted); font-size: 12px; }
+.srch-name { display: grid; line-height: 1.35; }
+/* Trượt nhẹ khi đổi ngày trong khung chi tiết */
+@keyframes slide-l { from { opacity: .4; transform: translateX(18px); } }
+@keyframes slide-r { from { opacity: .4; transform: translateX(-18px); } }
+.d-head.slide-l { animation: slide-l .22s ease-out; } .d-head.slide-r { animation: slide-r .22s ease-out; }
+@media (prefers-reduced-motion: reduce) { .skeleton, .d-head.slide-l, .d-head.slide-r { animation: none; } }
 @media print { .topbar, .detail, .peek, .legend, .stage-head .nav button { display: none !important; } .shell { display: block; } }

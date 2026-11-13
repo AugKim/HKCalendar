@@ -39,7 +39,9 @@
   }
   const YEAR_MIN = 1583, YEAR_MAX = 9000;   // lịch Gregory
   const MONTHS = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
-  const isNarrow = () => window.matchMedia('(max-width: 1100px)').matches;
+  const daysIn = (y, m) => u.civ(u.mk(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1) - 1).d;
+  const isHigh = p => p.rank <= 5 || p.rank === 7 || p.tet;          // in đậm trên lịch: lễ trọng, lễ kính, Tết…
+  const SKELETON = '<div class="rd-loading"><div class="skeleton" style="width:40%"></div><div class="skeleton"></div><div class="skeleton" style="width:85%"></div></div>';
 
   // ------------------------------------------------------------------ nạp dữ liệu bài đọc (trì hoãn)
   const loaded = new Map();
@@ -56,25 +58,34 @@
     return p;
   }
   const ensure = names => Promise.all(names.map(loadFile));
-  function tables() {
-    const g = G;
-    return {
-      READINGS_DATA: g('READINGS_DATA'), READINGS_SUNDAY: g('READINGS_SUNDAY'), READINGS_SEASONAL: g('READINGS_SEASONAL'),
-      READINGS_ORDINARY_Y1: g('READINGS_ORDINARY_Y1'), READINGS_ORDINARY_Y2: g('READINGS_ORDINARY_Y2'),
-      READINGS_SPECIAL: g('READINGS_SPECIAL'), OptionsaintReadings: g('OptionsaintReadings'),
-      MEDITATION_LINKS: g('MEDITATION_LINKS'), MEDITATION_BY_CODE: g('MEDITATION_BY_CODE'), MEDITATIONS: g('MEDITATIONS')
-    };
-  }
+  const TABLES = ['READINGS_DATA', 'READINGS_SUNDAY', 'READINGS_SEASONAL', 'READINGS_ORDINARY_Y1', 'READINGS_ORDINARY_Y2',
+    'READINGS_SPECIAL', 'OptionsaintReadings', 'MEDITATION_LINKS', 'MEDITATION_BY_CODE', 'MEDITATIONS'];
+  const tables = () => TABLES.reduce((o, n) => { o[n] = G(n); return o; }, {});
+  // Các file dữ liệu cần cho một ngày (bài đọc + phần phụ)
+  const filesFor = (i, extra) => window.Readings.filesNeeded(i).concat(['readingdata.js', 'meditations.js'], extra || []);
   const readingsApi = () => window.Readings.make(tables());
 
   // ------------------------------------------------------------------ định dạng
   const fmtLong = i => i.dowName + ', ' + i.d + ' tháng ' + i.m + ', ' + i.y;
   const cellName = n => String(n).split(/,\s/)[0];
   function weekShort(w) {
-    return String(w || '').replace('Thường Niên', 'TN').replace('Mùa Phục Sinh', 'Phục Sinh').replace('Mùa Chay', 'Chay').replace('Mùa Vọng', 'Vọng').replace('Mùa Giáng Sinh', 'Giáng Sinh').replace(/^Tuần /, 'Tuần ');
+    return String(w || '').replace('Thường Niên', 'TN').replace('Mùa Phục Sinh', 'Phục Sinh').replace('Mùa Chay', 'Chay').replace('Mùa Vọng', 'Vọng').replace('Mùa Giáng Sinh', 'Giáng Sinh');
   }
   function colorLabel(p) { return 'Màu ' + p.colorName.toLowerCase() + (p.altColor ? ' hoặc ' + ({ rose: 'hồng', purple: 'tím' }[p.altColor] || p.altColor) : ''); }
   const cycleLabel = i => 'Năm ' + i.cycle + ' · ' + (i.weekdayCycle === '1' ? 'năm lẻ' : 'năm chẵn');
+  function chipsHTML(i, withFlags) {
+    const p = i.primary, chips = ['<span class="chip c-' + p.color + '"><i class="dot c-' + p.color + '"></i>' + esc(colorLabel(p)) + '</span>'];
+    if (p.gradeLabel && p.grade !== 'WEEKDAY') chips.push('<span class="chip c-' + p.color + '">' + esc(p.gradeLabel) + '</span>');
+    chips.push('<span class="chip neutral">' + esc(cycleLabel(i)) + '</span>');
+    i.discipline.forEach(d => chips.push('<span class="chip ' + (d.type === 'fast' || d.type === 'abstinence' ? 'c-purple' : 'c-red') + '">' + esc(d.label) + '</span>'));
+    if (withFlags) i.flags.forEach(f => chips.push('<span class="chip neutral">' + esc(f) + '</span>'));
+    return chips.join('');
+  }
+  // Dòng "Chầu Thánh Thể tại: …" (dữ liệu eucharisticAdoration.js theo số Chúa Nhật trong năm)
+  function adorationHTML(n) {
+    const ad = (G('eucharisticAdoration') || {})[u.pad2(P.sundayIndex(n))], c = ad && ad.content ? String(ad.content) : '';
+    return c ? '<div><b>' + esc(c.split(':')[0]) + ':</b> ' + esc(c.split(':').slice(1).join(':').trim()) + '</div>' : '';
+  }
   function ariaDay(i) {
     return i.dowName + ' ' + i.d + ' tháng ' + i.m + ', ' + i.primary.name + ', ' + i.primary.colorName.toLowerCase() + (i.holyDay && !i.sunday ? ', lễ buộc' : '');
   }
@@ -83,7 +94,7 @@
   function cellHTML(i) {
     if (!i) return '<div class="day out" aria-hidden="true"></div>';
     const p = i.primary;
-    const hi = p.rank <= 5 || p.rank === 7 || p.tet;
+    const hi = isHigh(p);
     const ferial = p.kind === 'temporal' && p.rank >= 9 && !i.sunday && p.grade === 'WEEKDAY';
     let name = '';
     if (!ferial) name = '<span class="nm' + (p.rank <= 3 || p.tet ? ' sol' : '') + '">' + esc(i.sunday && p.kind === 'temporal' ? p.short : cellName(p.name)) + '</span>';
@@ -123,10 +134,10 @@
     for (let m = 1; m <= 12; m++) {
       const weeks = P.monthGrid(state.y, m);
       h += '<section class="mini"><h3><button type="button" data-month="' + m + '">' + MONTHS[m - 1] + '</button></h3><div class="mini-g">';
-      u.DOW_SHORT.forEach(d => { h += '<div class="mh">' + d.replace('CN', 'CN') + '</div>'; });
+      u.DOW_SHORT.forEach(d => { h += '<div class="mh">' + d + '</div>'; });
       weeks.forEach(w => w.forEach(i => {
         if (!i) { h += '<span></span>'; return; }
-        const p = i.primary, hi = p.rank <= 5 || p.rank === 7 || p.tet;
+        const p = i.primary, hi = isHigh(p);
         h += '<button type="button" class="md c-' + p.color + (hi ? ' hi' : '') + (i.sunday ? ' sunday' : '') + (i.n === todayN ? ' today' : '') + '" data-n="' + i.n + '" aria-pressed="' + (i.n === state.sel) + '" title="' + esc(i.dowName + ' ' + i.d + '/' + i.m + ' — ' + p.name) + '" aria-label="' + esc(ariaDay(i)) + '">' + i.d + '</button>';
       }));
       h += '</div></section>';
@@ -135,7 +146,7 @@
   }
 
   function renderList(root) {
-    const first = u.mk(state.y, state.m, 1), last = u.mk(state.m === 12 ? state.y + 1 : state.y, state.m === 12 ? 1 : state.m + 1, 1) - 1;
+    const first = u.mk(state.y, state.m, 1), last = u.mk(state.y, state.m, daysIn(state.y, state.m));
     let h = '<ul class="lst">';
     for (let n = first; n <= last; n++) {
       const i = P.day(n), p = i.primary;
@@ -170,7 +181,7 @@
       renderPeek();
     }
     if (isOpen()) renderDetail();
-    try { history.replaceState(null, '', '#' + u.iso(n) + (state.view !== 'month' ? '/' + state.view : '')); } catch (e) { /* file:// */ }
+    syncHash();
     if (opts.focus) { const b = $('[data-n="' + n + '"]', $('#calendar')); if (b) b.focus({ preventScroll: false }); }
     if (opts.open) openSheet();
   }
@@ -198,20 +209,16 @@
   }
   function renderPeek() {
     const my = ++peekToken, i = P.day(state.sel), p = i.primary, el = $('#peek');
-    const chips = ['<span class="chip c-' + p.color + '"><i class="dot c-' + p.color + '"></i>' + esc(colorLabel(p)) + '</span>'];
-    if (p.gradeLabel && p.grade !== 'WEEKDAY') chips.push('<span class="chip c-' + p.color + '">' + esc(p.gradeLabel) + '</span>');
-    chips.push('<span class="chip neutral">' + esc(cycleLabel(i)) + '</span>');
-    i.discipline.forEach(d => chips.push('<span class="chip ' + (d.type === 'fast' || d.type === 'abstinence' ? 'c-purple' : 'c-red') + '">' + esc(d.label) + '</span>'));
     el.className = 'peek c-' + p.color;
     const lun = L.get(i.y, i.m, i.d);
     const solemn = i.solemnOption ? '<div class="pk-week" style="color:var(--red);font-weight:600">Kính trọng thể: ' + esc(i.solemnOption.name.replace(/ \(kính trọng thể\)/, '')) + ' (' + esc(i.solemnOption.colorName.toLowerCase()) + ')</div>' : '';
     const extra = solemn + (i.optionals.length ? '<div class="pk-week">Nhớ tùy ý: ' + esc(i.optionals.map(o => o.name).join(' · ')) + '</div>' : '');
     el.innerHTML =
       '<div class="pk-date"><small>' + esc(i.dowName) + '</small><b>' + i.d + '</b><span>Tháng ' + i.m + ' · ' + i.y + '</span><em>Âm lịch ' + i.lunar.label + ' · ' + esc(L.yearName(lun.year)) + '</em></div>' +
-      '<div class="pk-main"><div class="chips">' + chips.join('') + '</div><h2>' + esc(p.name) + '</h2><div class="pk-week">' + esc(i.week) + ' · ' + esc(i.seasonName) + '</div>' + extra +
+      '<div class="pk-main"><div class="chips">' + chipsHTML(i) + '</div><h2>' + esc(p.name) + '</h2><div class="pk-week">' + esc(i.week) + ' · ' + esc(i.seasonName) + '</div>' + extra +
       '<dl class="pk-refs" id="pkRefs"><dt>Bài đọc</dt><dd><div class="skeleton"></div></dd></dl></div>' +
       '<div class="pk-act"><button type="button" class="btn btn-primary pk-open" id="peekOpen">Xem đầy đủ &amp; bài đọc</button><div class="pk-nav"><button type="button" class="icon-btn" data-pstep="-1" aria-label="Ngày trước">‹</button><button type="button" class="icon-btn" data-pstep="1" aria-label="Ngày sau">›</button></div></div>';
-    ensure(window.Readings.filesNeeded(i).concat(['readingdata.js', 'meditations.js'])).then(() => {
+    ensure(filesFor(i)).then(() => {
       if (my !== peekToken) return;
       const R = readingsApi();
       const box = $('#pkRefs'); if (box) box.innerHTML = refsHTML(refsFor(i, R));
@@ -224,12 +231,6 @@
   function renderDetail() {
     const my = ++token, n = state.sel, i = P.day(n), p = i.primary;
     const lun = L.get(i.y, i.m, i.d);
-    const chips = [];
-    chips.push('<span class="chip c-' + p.color + '"><i class="dot c-' + p.color + '"></i>' + esc(colorLabel(p)) + '</span>');
-    if (p.gradeLabel && !(p.grade === 'WEEKDAY')) chips.push('<span class="chip c-' + p.color + '">' + esc(p.gradeLabel) + '</span>');
-    chips.push('<span class="chip neutral">' + esc(cycleLabel(i)) + '</span>');
-    i.discipline.forEach(d => chips.push('<span class="chip ' + (d.type === 'obligation' ? 'c-red' : d.type === 'triduum' ? 'c-red' : 'c-purple') + '">' + esc(d.label) + '</span>'));
-    i.flags.forEach(f => chips.push('<span class="chip neutral">' + esc(f) + '</span>'));
 
     let body = '';
     i.notes.forEach(t => { body += '<p class="note">' + esc(t) + '</p>'; });
@@ -245,32 +246,25 @@
     });
     if (rows.length) body += '<div class="sec"><h4>Trong ngày</h4><ul class="oth">' + rows.map(r => '<li><span class="tag">' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></li>').join('') + '</ul></div>';
 
-    // Chầu Thánh Thể
-    const ad = (G('eucharisticAdoration') || {})[u.pad2(P.sundayIndex(n))];
-    const kv = [];
-    kv.push('<div><b>Âm lịch:</b> ngày ' + lun.day + ' ' + L.monthName(lun.month, lun.leap) + ' năm ' + L.yearName(lun.year) + '</div>');
-    if (ad && ad.content) kv.push('<div><b>' + esc(String(ad.content).split(':')[0]) + ':</b> ' + esc(String(ad.content).split(':').slice(1).join(':').trim()) + '</div>');
-    body += '<div class="sec"><h4>Thông tin</h4><div class="kv">' + kv.join('') + '</div></div>';
+    // Âm lịch + Chầu Thánh Thể (nếu dữ liệu đã nạp)
+    const adHere = adorationHTML(n);
+    body += '<div class="sec"><h4>Thông tin</h4><div class="kv"><div><b>Âm lịch:</b> ngày ' + lun.day + ' ' + L.monthName(lun.month, lun.leap) + ' năm ' + L.yearName(lun.year) + '</div>' + adHere + '</div></div>';
 
     // bài đọc
-    body += '<div class="sec"><h4>Bài đọc</h4><div id="readings"><div class="rd-loading"><div class="skeleton" style="width:40%"></div><div class="skeleton"></div><div class="skeleton" style="width:85%"></div></div></div></div>';
+    body += '<div class="sec"><h4>Bài đọc</h4><div id="readings">' + SKELETON + '</div></div>';
     body += '<div class="sec" id="medSec" hidden><h4>Gợi ý suy niệm</h4><div id="meditation"></div></div>';
 
-    const prevTitle = 'Ngày trước', nextTitle = 'Ngày sau';
     $('#detail').innerHTML =
       '<div class="d-head c-' + p.color + '"><div class="d-top"><div class="d-date"><b>' + esc(i.dowName) + '</b>, ' + i.d + ' tháng ' + i.m + ', ' + i.y + '</div>' +
-      '<div class="d-nav"><button class="icon-btn" data-step="-1" aria-label="' + prevTitle + '">‹</button><button class="icon-btn" data-step="1" aria-label="' + nextTitle + '">›</button><button class="icon-btn d-close" id="dClose" aria-label="Đóng">✕</button></div></div>' +
-      '<h3 class="d-title">' + esc(p.name) + '</h3><div class="chips">' + chips.join('') + '</div>' +
+      '<div class="d-nav"><button class="icon-btn" data-step="-1" aria-label="Ngày trước">‹</button><button class="icon-btn" data-step="1" aria-label="Ngày sau">›</button><button class="icon-btn d-close" id="dClose" aria-label="Đóng">✕</button></div></div>' +
+      '<h3 class="d-title">' + esc(p.name) + '</h3><div class="chips">' + chipsHTML(i, true) + '</div>' +
       '<div class="d-week">' + esc(i.week) + ' · ' + esc(i.seasonName) + ' · Âm lịch ' + i.lunar.label + '</div></div>' +
       '<div class="d-body">' + body + '</div>';
 
-    const info = i;
-    const files = window.Readings.filesNeeded(info).concat(['readingdata.js', 'meditationLinks.js', 'eucharisticAdoration.js', 'meditations.js']);
-    ensure(files).then(() => {
+    ensure(filesFor(i, ['meditationLinks.js', 'eucharisticAdoration.js'])).then(() => {
       if (my !== token) return;
-      renderReadings(info);
-      // Chầu Thánh Thể có thể vừa nạp xong
-      if (!ad && G('eucharisticAdoration')) { const a2 = G('eucharisticAdoration')[u.pad2(P.sundayIndex(info.n))]; if (a2 && a2.content) { const kvEl = $('.kv'); if (kvEl) kvEl.insertAdjacentHTML('beforeend', '<div><b>' + esc(String(a2.content).split(':')[0]) + ':</b> ' + esc(String(a2.content).split(':').slice(1).join(':').trim()) + '</div>'); } }
+      renderReadings(i);
+      if (!adHere) { const a = adorationHTML(n), kvEl = $('.kv'); if (a && kvEl) kvEl.insertAdjacentHTML('beforeend', a); }   // vừa nạp xong
     }).catch(err => {
       if (my !== token) return;
       const el = $('#readings'); if (el) el.innerHTML = '<div class="rd-miss">Không tải được dữ liệu bài đọc (' + esc(err.message) + '). Kiểm tra kết nối rồi thử lại.</div>';
@@ -278,16 +272,48 @@
   }
 
   // ------------------------------------------------------------------ hiển thị bài đọc
+  // Dòng trống hoặc chỉ có dấu chấm, "\ r" lạc trong dữ liệu
+  const junkLine = l => /^[\s.]*(\\\s*r)?[\s.]*$/.test(l);
+  const lines = t => String(t == null ? '' : t).split(/[\r\n]+/).map(l => l.trim()).filter(l => !junkLine(l));
   function textHTML(t) {
-    return String(t == null ? '' : t).split(/\r?\n+/).filter(s => s.trim()).map(s => '<p>' + esc(s.trim()) + '</p>').join('');
+    return lines(t).map(l => /^Đó là [Ll]ời Chúa\.?$/.test(l) ? '<div class="rd-end">' + esc(l) + '</div>' : '<p>' + esc(l) + '</p>').join('');
   }
+
+  // Bài đọc thay thế nằm chung trong bản văn: "…Hoặc đọc: 2 Mcb 7, 1. 20-23 ⏎ “Câu tóm ý” ⏎ Trích sách… ⏎ Nội dung…".
+  // Chỉ tách ở chữ "Hoặc:" / "Hoặc đọc:" viết hoa, đứng đầu dòng hoặc ngay sau "Alleluia." (chữ "hoặc" viết thường có trong lời Kinh Thánh).
+  const ALT_RE = /(?:(?<=^|[\r\n][\s.\\r]*)|(?<=lleluia[.!]?\)?\s*))\(?\s*Hoặc(?:\s+đọc)?\s*:\s*\)?/g;
+  const splitAlt = t => String(t == null ? '' : t).split(ALT_RE);
+  function altReading(part) {
+    const ls = lines(part), o = { cite: '', intro: '', title: '', body: '' };
+    if (!ls.length) return o;
+    const first = ls.shift(), q = first.search(/[“"]/);
+    o.cite = (q > 0 ? first.slice(0, q) : first).trim();
+    if (q > 0) o.intro = first.slice(q).trim();
+    if (!o.intro && ls.length && /^[“"]/.test(ls[0])) o.intro = ls.shift();
+    if (ls.length && /^(Bài trích|Trích|Tin Mừng)/i.test(ls[0])) o.title = ls.shift();
+    o.body = ls.join('\n');
+    return o;
+  }
+  // Khối "Hoặc đọc": bodyHTML = bản văn đã dựng sẵn (bản dịch khác); không có thì dùng bản Sách Bài Đọc
+  function altHTML(a, bodyHTML, attrs) {
+    return '<div class="rd-alt"' + (attrs || '') + '><div class="rd-alt-label">Hoặc đọc</div>' + (a.cite ? '<div class="rd-cite">' + esc(a.cite) + '</div>' : '') +
+      (bodyHTML ? bodyHTML : (a.title ? '<div class="rd-title">' + esc(a.title) + '</div>' : '') + (a.intro ? '<div class="rd-intro">' + esc(a.intro) + '</div>' : '') +
+        '<div class="rd-text">' + textHTML(a.body) + '</div>') + '</div>';
+  }
+  function contentHTML(t) {
+    const parts = splitAlt(t);
+    return '<div class="rd-text">' + textHTML(parts[0]) + '</div>' + parts.slice(1).map(p => altHTML(altReading(p))).join('');
+  }
+  // Câu đáp / câu tung hô có hai lựa chọn: hiện từng câu, ngăn bởi chữ "hoặc"
+  const OR_RE = /\(?\s*Hoặc(?:\s+đọc)?\s*:\s*\)?/g;   // câu ngắn: tách ở mọi chữ "Hoặc:" viết hoa
+  const orJoin = (t, wrap) => String(t == null ? '' : t).split(OR_RE).map(x => x.replace(/\)\s*$/, '').trim()).filter(Boolean).map(wrap).join('<div class="rd-or">hoặc</div>');
   function readingBlock(label, d) {
     if (!d) return '';
-    let h = '<div class="rd-block"><div class="rd-label">' + esc(d.title && /^(Bài|Trích|Tin)/.test(label) ? label : label) + '</div>';
+    let h = '<div class="rd-block"><div class="rd-label">' + esc(label) + '</div>';
     if (d.excerpt) h += '<div class="rd-cite">' + esc(d.excerpt) + '</div>';
     if (d.title) h += '<div class="rd-title">' + esc(d.title) + '</div>';
     if (d.info) h += '<div class="rd-intro">' + esc(d.info) + '</div>';
-    if (d.content) h += '<div class="rd-text">' + textHTML(d.content) + '</div>';
+    if (d.content) h += contentHTML(d.content);
     if (d.end) h += '<div class="rd-end">' + esc(d.end) + '</div>';
     return h + '</div>';
   }
@@ -295,7 +321,7 @@
     if (!d) return '';
     let h = '<div class="rd-block"><div class="rd-label">Đáp ca</div>';
     if (d.excerpt) h += '<div class="rd-cite">' + esc(d.excerpt) + '</div>';
-    if (d.response) h += '<div class="rd-resp">' + esc(d.response) + '</div>';
+    if (d.response) h += orJoin(d.response, r => '<div class="rd-resp">' + esc(r) + '</div>');
     if (d.verses && d.verses.length) h += d.verses.map(v => '<p class="rd-verse">' + esc(v) + '</p>').join('');
     return h + '</div>';
   }
@@ -306,9 +332,9 @@
       return '<dl class="refs" style="margin-top:14px">' + rows.map(r => '<dt>' + r[0] + '</dt><dd>' + esc(r[1].excerpt) + '</dd>').join('') + '</dl>' +
         '<div class="rd-miss">Bản văn đầy đủ của ngày này chưa có trong dữ liệu; hiện chỉ có phần trích dẫn.</div>';
     }
-    let h = readingBlock(data.firstReading && data.firstReading.title ? 'Bài đọc I' : 'Bài đọc I', data.firstReading) + psalmBlock(data.psalms);
+    let h = readingBlock('Bài đọc I', data.firstReading) + psalmBlock(data.psalms);
     if (data.secondReading) h += readingBlock('Bài đọc II', data.secondReading);
-    if (data.alleluia) h += '<div class="rd-alle"><div class="rd-label">Tung hô Tin Mừng</div>' + (data.alleluia.verse ? '<div class="rd-cite">' + esc(data.alleluia.verse) + '</div>' : '') + '<div class="rd-text">' + textHTML(data.alleluia.content) + '</div></div>';
+    if (data.alleluia) h += '<div class="rd-alle"><div class="rd-label">Tung hô Tin Mừng</div>' + (data.alleluia.verse ? '<div class="rd-cite">' + esc(data.alleluia.verse) + '</div>' : '') + '<div class="rd-text">' + orJoin(data.alleluia.content, textHTML) + '</div></div>';
     h += readingBlock('Tin Mừng', data.gospel);
     return h;
   }
@@ -320,7 +346,8 @@
     const html = [], plain = [], miss = [];
     const one = (label, d, isPs) => {
       if (!d || !d.excerpt) return;
-      const ref = d.content || (d.verses || []).join(' ');
+      const parts = d.content ? splitAlt(d.content) : [];
+      const ref = parts.length ? parts[0] : (d.verses || []).join(' ');   // chỉ bài chính, không gồm bài thay thế
       let cite = d.excerpt;
       const byYear = cite.match(new RegExp('\\(' + cycle + '\\)\\s*([^;:()]+)'));   // "(A)Mt 28, 1-10; (B) Mc 16,1-8: (C)…"
       if (byYear) cite = byYear[1].trim();
@@ -331,11 +358,18 @@
         return;
       }
       const verse = x => '<sup class="vno">' + x.v + '</sup>' + esc(x.text);
-      const body = isPs
-        ? r.stanzas.map(st => '<p class="rd-verse">' + st.map(verse).join(' ') + '</p>').join('')
-        : '<div class="rd-text">' + r.stanzas.map(st => '<p>' + st.map(verse).join(' ') + '</p>').join('') + '</div>';
-      html.push('<div class="rd-block"' + lang + '><div class="rd-label">' + label + '</div><div class="rd-cite">' + esc(cite) + '</div>' + body + '</div>');
-      plain.push(label.toUpperCase() + ' — ' + cite + '\n' + r.stanzas.map(st => st.map(x => x.text).join(' ')).join('\n'));
+      const textOf = res => '<div class="rd-text">' + res.stanzas.map(st => '<p>' + st.map(verse).join(' ') + '</p>').join('') + '</div>';
+      const plainOf = res => res.stanzas.map(st => st.map(x => x.text).join(' ')).join('\n');
+      const body = isPs ? r.stanzas.map(st => '<p class="rd-verse">' + st.map(verse).join(' ') + '</p>').join('') : textOf(r);
+      // Bài đọc thay thế ("Hoặc đọc: …"): lấy theo bản dịch; không tìm được thì giữ bản Sách Bài Đọc
+      let alts = '', altPlain = '';
+      parts.slice(1).map(altReading).forEach(a => {
+        const ar = a.cite ? window.Bible.lookupBest(T, a.cite, opts, a.body) : { ok: false };
+        if (ar.ok) { alts += altHTML(a, textOf(ar)); altPlain += '\n\nHOẶC ĐỌC: ' + a.cite + '\n' + plainOf(ar); }
+        else { alts += altHTML(a, '', ' lang="vi"'); miss.push(label + ' (bài thay thế)'); altPlain += '\n\nHOẶC ĐỌC: ' + a.cite + '\n' + lines(a.body).join('\n'); }
+      });
+      html.push('<div class="rd-block"' + lang + '><div class="rd-label">' + label + '</div><div class="rd-cite">' + esc(cite) + '</div>' + body + alts + '</div>');
+      plain.push(label.toUpperCase() + ' — ' + cite + '\n' + plainOf(r) + altPlain);
     };
     one('Bài đọc I', data.firstReading);
     one('Đáp ca', data.psalms, true);
@@ -346,13 +380,14 @@
     return { html: note + html.join(''), plain: plain.join('\n\n') };
   }
 
+  const plainContent = t => splitAlt(t).map((p, k) => (k ? 'HOẶC ĐỌC: ' : '') + lines(p).join('\n')).join('\n\n');
   function plainText(data) {
     const parts = [];
-    const blk = (l, d) => { if (d) parts.push([l + (d.excerpt ? ' — ' + d.excerpt : ''), d.title, d.info, d.content, d.end].filter(Boolean).join('\n')); };
+    const blk = (l, d) => { if (d) parts.push([l + (d.excerpt ? ' — ' + d.excerpt : ''), d.title, d.info, d.content && plainContent(d.content), d.end].filter(Boolean).join('\n')); };
     blk('BÀI ĐỌC I', data.firstReading);
-    if (data.psalms) parts.push(['ĐÁP CA' + (data.psalms.excerpt ? ' — ' + data.psalms.excerpt : ''), data.psalms.response].concat(data.psalms.verses || []).filter(Boolean).join('\n'));
+    if (data.psalms) parts.push(['ĐÁP CA' + (data.psalms.excerpt ? ' — ' + data.psalms.excerpt : ''), data.psalms.response && lines(data.psalms.response.replace(OR_RE, '\nHoặc: ')).join('\n')].concat(data.psalms.verses || []).filter(Boolean).join('\n'));
     blk('BÀI ĐỌC II', data.secondReading);
-    if (data.alleluia) parts.push(['TUNG HÔ TIN MỪNG', data.alleluia.verse, data.alleluia.content].filter(Boolean).join('\n'));
+    if (data.alleluia) parts.push(['TUNG HÔ TIN MỪNG', data.alleluia.verse, data.alleluia.content && lines(data.alleluia.content.replace(OR_RE, '\nHoặc: ')).join('\n')].filter(Boolean).join('\n'));
     blk('TIN MỪNG', data.gospel);
     return parts.join('\n\n');
   }
@@ -370,6 +405,27 @@
       '<p class="med-foot">Gợi ý mang tính hỗ trợ cầu nguyện cá nhân, không thay thế bài giảng.</p>';
   }
 
+  function meditationPlain(med, data) {
+    const cite = k => (data && data[k] && data[k].excerpt ? ' (' + data[k].excerpt.replace(/[:.\s]+$/, '') + ')' : '');
+    return [med.theme,
+      ...[['Bài đọc I', 'first', 'firstReading'], ['Đáp ca', 'psalm', 'psalms'], ['Bài đọc II', 'second', 'secondReading'], ['Tin Mừng', 'gospel', 'gospel']]
+        .filter(x => med[x[1]]).map(x => x[0].toUpperCase() + cite(x[2]) + '\n' + med[x[1]]),
+      med.connect && 'NỐI KẾT CÁC BÀI ĐỌC\n' + med.connect,
+      med.question && 'CÂU HỎI GỢI SUY\n' + med.question,
+      med.action && 'SỐNG LỜI CHÚA\n' + med.action].filter(Boolean).join('\n\n');
+  }
+
+  // Chia sẻ qua bảng chia sẻ của máy (Zalo, Messenger…); máy không hỗ trợ thì sao chép để dán.
+  const dayLink = n => location.href.split('#')[0] + '#' + u.iso(n);
+  async function shareText(heading, text, okMsg) {
+    const i = P.day(state.sel), title = i.primary.name + ' — ' + fmtLong(i);
+    const full = title + (heading ? '\n' + heading : '') + '\n\n' + text + '\n\n' + dayLink(state.sel);
+    if (navigator.share) {
+      try { await navigator.share({ title, text: full }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(full); toast(okMsg || 'Đã sao chép, bạn có thể dán để chia sẻ.'); } catch (e) { toast('Không sao chép được.'); }
+  }
+
   function expandSets(sets) {
     const out = [];
     sets.forEach(s => {
@@ -383,7 +439,7 @@
     const box = $('#readings'); if (!box) return;
     const R = readingsApi(), res = R.build(info);
     const med = R.meditationLink(info);
-    let tabs = res.tabs.map(t => Object.assign({}, t, { sets: expandSets(t.sets) }));
+    const tabs = res.tabs.map(t => Object.assign({}, t, { sets: expandSets(t.sets) }));
     if (!tabs.length) { box.innerHTML = '<div class="rd-miss">Chưa có dữ liệu bài đọc cho ngày này.</div>'; return; }
     if (!state.tab || !tabs.some(t => t.id === state.tab)) state.tab = tabs[0].id;
     const cur = tabs.find(t => t.id === state.tab);
@@ -397,7 +453,7 @@
     if (cur.sets.length > 1) h += '<div class="opts">' + cur.sets.map((s, k) => '<button data-set="' + k + '" aria-pressed="' + (k === state.setIdx) + '">' + esc(s.label || ('Lựa chọn ' + (k + 1))) + '</button>').join('') + '</div>';
     let plainTr = null;
     if (tr.file && !trData.has(tr.id)) {
-      h += '<div class="rd-loading"><div class="skeleton" style="width:40%"></div><div class="skeleton"></div><div class="skeleton" style="width:85%"></div></div>';
+      h += SKELETON;
       const n = info.n;
       loadTranslation(tr.id).then(() => { if (state.sel === n && state.tr === tr.id) renderReadings(info); })
         .catch(() => { toast('Không tải được bản dịch ' + tr.label + '.'); if (state.tr === tr.id) { state.tr = 'vn'; renderReadings(info); } });
@@ -405,13 +461,19 @@
       const out = setHTMLTr(set.data, trData.get(tr.id), tr, info.cycle);
       h += out.html; plainTr = out.plain;
     } else h += setHTML(set.data);
-    h += '<div class="rd-tools"><button class="btn" id="btnCopy">Sao chép bài đọc</button>' + (med ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(med.url) + '">' + esc(med.label || 'Suy niệm') + '</a>' : '') + '</div>';
     const sugg = R.meditationFor(cur, state.setIdx);
-    if (sugg) h = h.replace('<div class="rd-tools">', '<div class="rd-tools"><button class="btn" id="btnMed">Gợi ý suy niệm ↓</button>');
+    h += '<div class="rd-tools">' + (sugg ? '<button class="btn" id="btnMed">Gợi ý suy niệm ↓</button>' : '') +
+      '<button class="btn" id="btnShare">Chia sẻ</button><button class="btn" id="btnCopy">Sao chép</button>' +
+      (med ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(med.url) + '">' + esc(med.label || 'Suy niệm') + '</a>' : '') + '</div>';
     box.innerHTML = h;
     box._plain = plainTr != null ? plainTr : (set.data && !set.data.summaryOnly ? plainText(set.data) : '');
     const ms = $('#medSec');
-    if (ms) { ms.hidden = !sugg; $('#meditation').innerHTML = sugg ? meditationHTML(sugg, set.data) : ''; }
+    if (ms) {
+      ms.hidden = !sugg;
+      const mbox = $('#meditation');
+      mbox.innerHTML = sugg ? meditationHTML(sugg, set.data) + '<div class="rd-tools"><button class="btn" id="btnShareMed">Chia sẻ suy niệm</button></div>' : '';
+      mbox._plain = sugg ? meditationPlain(sugg, set.data) : '';
+    }
   }
 
   // ------------------------------------------------------------------ xuất lịch
@@ -434,7 +496,7 @@
     else await ensure(['readingdata.js']);
     const R = readingsApi(), months = [];
     monthsIn(range).forEach(([y, m]) => {
-      const days = [], len = u.civ(u.mk(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1) - 1).d;
+      const days = [], len = daysIn(y, m);
       for (let d = 1; d <= len; d++) {
         const i = P.day(u.mk(y, m, d)), p = i.primary;
         const o = { ngay: i.iso, thu: i.dowName, le: p.name, bac: p.gradeLabel, mau: p.colorName, tuan: i.week, mua: i.seasonName, nam: i.cycle, namChanLe: i.weekdayCycle === '1' ? 'lẻ' : 'chẵn', maBaiDoc: i.code };
@@ -495,20 +557,94 @@
   let toastTimer;
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200); }
 
+  // ------------------------------------------------------------------ tìm lễ theo tên
+  // So khớp không dấu: "phero" khớp "Phêrô", "le tro" khớp "Lễ Tro".
+  const fold = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/-/g, '').toLowerCase();
+  const searchIndex = new Map();   // năm → [{ n, items: [{ name, note, key }] }]
+  function yearIndex(y) {
+    if (searchIndex.has(y)) return searchIndex.get(y);
+    const out = [];
+    for (let n = u.mk(y, 1, 1), end = u.mk(y, 12, 31); n <= end; n++) {
+      const i = P.day(n), items = [];
+      const add = (name, note) => { if (name && !items.some(x => x.name === name)) items.push({ name, note: note || '', words: fold(name).split(/[^a-z0-9]+/).filter(Boolean) }); };
+      add(i.primary.name, i.primary.gradeLabel !== 'Ngày thường' ? i.primary.gradeLabel : '');
+      if (i.primary.kind !== 'temporal') add(i.temporal.name, 'Theo mùa');
+      i.optionals.forEach(o => add(o.name, 'Nhớ tùy ý'));
+      i.others.forEach(o => { if (o.role === 'moved') add(o.name, 'Dời sang ' + u.fmtDM(o.moveTo)); else if (o.role !== 'season') add(o.name, ''); });
+      if (i.solemnOption) add(i.solemnOption.name, 'Kính trọng thể');
+      i.flags.forEach(f => add(f, ''));
+      if (i.ashTransferred && i.primary.kind === 'temporal') add(i.temporal.name, '');
+      out.push({ n, items });
+    }
+    searchIndex.set(y, out);
+    return out;
+  }
+  let searchYear = 0;
+  function runSearch() {
+    const q = fold($('#searchQ').value).trim(), words = q.split(/\s+/).filter(Boolean), res = $('#searchRes');
+    $('#searchYear').textContent = 'Năm ' + searchYear;
+    if (!words.length) { res.innerHTML = '<li class="srch-hint">Gõ tên lễ, tên thánh hoặc mùa: Phêrô, Tết, Lễ Tro, Mân Côi…</li>'; return; }
+    // Mỗi từ gõ vào phải là đầu của một từ trong tên lễ. Nếu có kết quả khớp trọn từ ("le tro" → "Lễ Tro") thì chỉ hiện những kết quả đó,
+    // để không lẫn với "Lễ Trọng"; còn khi đang gõ dở ("phe") thì hiện mọi kết quả khớp đầu từ.
+    const match = (it, exact) => words.every(w => it.words.some(x => (exact ? x === w : x.startsWith(w))));
+    const find = exact => { const out = []; for (const d of yearIndex(searchYear)) { const it = d.items.find(x => match(x, exact)); if (it) out.push({ n: d.n, it }); } return out; };
+    let hits = find(true);
+    if (!hits.length) hits = find(false);
+    hits = hits.slice(0, 60);
+    res.innerHTML = hits.length ? hits.map(h => {
+      const c = u.civ(h.n), i = P.day(h.n);
+      return '<li><button type="button" class="srch-item c-' + i.primary.color + '" data-goto="' + h.n + '"><span class="srch-date"><b>' + c.d + '/' + c.m + '</b><small>' + esc(i.dowName) + '</small></span>' +
+        '<span class="srch-name">' + esc(h.it.name) + (h.it.note ? '<small>' + esc(h.it.note) + '</small>' : '') + '</span></button></li>';
+    }).join('') : '<li class="srch-hint">Không tìm thấy trong năm ' + searchYear + '.</li>';
+  }
+  function openSearch() {
+    const dlg = $('#searchDlg');
+    if (dlg.open) return;
+    searchYear = state.y;
+    dlg.showModal();
+    runSearch();
+    $('#searchQ').focus(); $('#searchQ').select();
+  }
+
   // ------------------------------------------------------------------ sự kiện
   function step(delta) {
     if (state.view === 'year') { state.y += delta; render(); return; }
     let m = state.m + delta, y = state.y;
     while (m < 1) { m += 12; y--; } while (m > 12) { m -= 12; y++; }
     state.y = y; state.m = m;
-    const dim = u.civ(u.mk(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1) - 1).d;
-    const cur = u.civ(state.sel);
-    select(u.mk(y, m, Math.min(cur.d, dim)), { rerender: true });
+    select(u.mk(y, m, Math.min(u.civ(state.sel).d, daysIn(y, m))), { rerender: true });
   }
-  function setView(v) { state.view = v; store.set('view', v); render(); try { history.replaceState(null, '', '#' + u.iso(state.sel) + (v !== 'month' ? '/' + v : '')); } catch (e) { /* */ } }
-  function goToday() { state.view = state.view === 'year' ? 'year' : state.view; const c = u.civ(todayN); state.y = c.y; state.m = c.m; select(todayN, { rerender: true, focus: false }); }
+  function syncHash() { try { history.replaceState(null, '', '#' + u.iso(state.sel) + (state.view !== 'month' ? '/' + state.view : '')); } catch (e) { /* file:// */ } }
+  function setView(v) { state.view = v; store.set('view', v); render(); syncHash(); }
+  function goToday() { const c = u.civ(todayN); state.y = c.y; state.m = c.m; select(todayN, { rerender: true }); }
+
+  // Vuốt ngang để đổi ngày/tháng. Bỏ qua khi vuốt trên thanh tab cuộn ngang, ô nhập, hoặc đang bôi đen chữ.
+  function onSwipe(el, cb) {
+    let x0 = null, y0 = 0, t0 = 0;
+    el.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1 || e.target.closest('.tabs, .opts, input, select, textarea')) { x0 = null; return; }
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+    }, { passive: true });
+    el.addEventListener('touchend', e => {
+      if (x0 == null) return;
+      const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      x0 = null;
+      if (Date.now() - t0 > 700 || Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+      if (window.getSelection && String(window.getSelection()).trim()) return;
+      cb(dx < 0 ? 1 : -1);
+    }, { passive: true });
+  }
+  // Hiệu ứng trượt nhẹ khi đổi ngày trong khung chi tiết
+  function stepDay(d) {
+    select(state.sel + d);
+    const el = $('#detail .d-head');
+    if (el) { el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; el.classList.add(d > 0 ? 'slide-l' : 'slide-r'); }
+  }
 
   function bind() {
+    onSwipe($('#detail'), stepDay);
+    onSwipe($('#peek'), d => select(state.sel + d));
+    onSwipe($('#calendar'), step);
     $('#calendar').addEventListener('click', e => {
       const mb = e.target.closest('[data-month]');
       if (mb) { state.m = Number(mb.dataset.month); setView('month'); return; }
@@ -530,7 +666,7 @@
     $('#calendar').addEventListener('dblclick', e => { const b = e.target.closest('[data-n]'); if (b) select(Number(b.dataset.n), { open: true }); });
     $('#scrim').addEventListener('click', closeSheet);
     $('#detail').addEventListener('click', e => {
-      const st = e.target.closest('[data-step]'); if (st) { select(state.sel + Number(st.dataset.step)); return; }
+      const st = e.target.closest('[data-step]'); if (st) { stepDay(Number(st.dataset.step)); return; }
       if (e.target.closest('#dClose')) { closeSheet(); return; }
       const tb = e.target.closest('[data-tab]'); if (tb) { state.tab = tb.dataset.tab; state.setIdx = 0; renderReadings(P.day(state.sel)); return; }
       const trb = e.target.closest('[data-tr]');
@@ -542,7 +678,15 @@
         const i = P.day(state.sel);
         const full = i.primary.name + ' — ' + fmtLong(i) + '\n\n' + t;
         (navigator.clipboard ? navigator.clipboard.writeText(full) : Promise.reject()).then(() => toast('Đã sao chép bài đọc'), () => toast('Không sao chép được'));
+        return;
       }
+      if (e.target.closest('#btnShare')) {
+        const t = $('#readings')._plain;
+        if (!t) { toast('Chưa có bản văn để chia sẻ.'); return; }
+        shareText('', t);
+        return;
+      }
+      if (e.target.closest('#btnShareMed')) { const t = $('#meditation')._plain; if (t) shareText('Gợi ý suy niệm', t); }
     });
     $('#prevPeriod').addEventListener('click', () => step(-1));
     $('#nextPeriod').addEventListener('click', () => step(1));
@@ -560,6 +704,14 @@
       const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
       const next = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = next; store.set('theme', next);
     });
+    $('#btnSearch').addEventListener('click', openSearch);
+    $('#searchQ').addEventListener('input', runSearch);
+    $('#searchQ').addEventListener('keydown', e => { if (e.key === 'Enter') { const b = $('#searchRes [data-goto]'); if (b) b.click(); e.preventDefault(); } });
+    $('#searchDlg').addEventListener('click', e => {
+      if (e.target === e.currentTarget || e.target.closest('#searchClose')) { e.currentTarget.close(); return; }   // bấm ra ngoài hoặc nút ✕
+      const sy = e.target.closest('[data-sy]'); if (sy) { searchYear = Math.max(YEAR_MIN, Math.min(YEAR_MAX, searchYear + Number(sy.dataset.sy))); runSearch(); return; }
+      const g = e.target.closest('[data-goto]'); if (g) { e.currentTarget.close(); select(Number(g.dataset.goto), { rerender: true }); }
+    });
     $('#btnExport').addEventListener('click', () => {
       const cur = state.y + '-' + u.pad2(state.m);
       $('#exFrom').value = cur; $('#exTo').value = cur;
@@ -571,7 +723,9 @@
       if (e.key === 'Escape') closeSheet();
       const tag = (e.target.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === 't' || e.key === 'T') goToday();
+      if (isOpen() && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); stepDay(e.key === 'ArrowRight' ? 1 : -1); return; }
+      if (e.key === '/' && !isOpen()) { e.preventDefault(); openSearch(); return; }
+      if ((e.key === 't' || e.key === 'T') && !isOpen()) goToday();
     });
     window.addEventListener('hashchange', readHash);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshToday(); });
@@ -592,7 +746,7 @@
     const m = location.hash.match(/^#(\d{4})-(\d{2})-(\d{2})(?:\/(month|year|list))?/);
     if (!m) return false;
     const hy = +m[1], hm = +m[2], hd = +m[3];
-    if (hm < 1 || hm > 12 || hd < 1 || hd > u.civ(u.mk(hm === 12 ? hy + 1 : hy, hm === 12 ? 1 : hm + 1, 1) - 1).d || hy < YEAR_MIN || hy > YEAR_MAX) return false;
+    if (hm < 1 || hm > 12 || hd < 1 || hd > daysIn(hy, hm) || hy < YEAR_MIN || hy > YEAR_MAX) return false;
     const n = u.mk(hy, hm, hd);
     if (m[4]) state.view = m[4];
     if (n === state.sel && state.y === +m[1]) return true;

@@ -1,4 +1,4 @@
-const V = 'kcal-v13';
+const V = 'kcal-v17';
 const SHELL = ['./', 'index.html', 'css/app.css', 'js/lunar.js', 'js/engine.js', 'js/readings.js', 'js/bible.js', 'js/app.js', 'Reading/Saints.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 // Dữ liệu bài đọc (~1MB sau nén): tải sẵn khi cài để dùng offline ngay lần đầu.
 const DATA = ['Reading/readingdata.js', 'Reading/meditationLinks.js', 'Reading/eucharisticAdoration.js', 'Reading/Sunday.js', 'Reading/DailySeason.js', 'Reading/readings_year_1.js', 'Reading/readings_year_2.js', 'Reading/SaintsBible.js', 'Reading/Optionsaint.js', 'Reading/meditations.js'];

@@ -56,7 +56,6 @@
     return [147, v];                                         // 146, 147
   }
 
-
   /**
    * Trả về { book, psalm, parts: [{ch, v1, ch2, v2}] } hoặc null nếu không đọc được.
    * opts.hebrew: số Thánh vịnh đã theo Híp-ri (trích dẫn tóm tắt trong readingdata.js); mặc định theo Vulgata (các file toàn văn).

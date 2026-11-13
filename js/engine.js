@@ -214,17 +214,6 @@
   }
 
   // ------------------------------------------------------------------ cử hành theo mùa (temporal)
-  function pickSeason(Y, n) {
-    if (n >= Y.ash && n < Y.holyThu) return 'lent';
-    if (n >= Y.holyThu && n <= Y.easter) return 'triduum';
-    if (n > Y.easter && n <= Y.pentecost) return 'easter';
-    if (n >= Y.adventStart && n < Y.dec25) return 'advent';
-    if (n >= Y.dec25 && n < Y.baptism + 0) return 'christmas';
-    if (n === Y.baptism) return 'christmas';
-    if (n < Y.baptism) return 'christmas';
-    return 'ordinary';
-  }
-
   function T(season, o) {
     return Object.assign({ kind: 'temporal', id: 'T', season, grade: 'WEEKDAY', lord: false, color: SEASON_COLOR[season], altColor: null, note: '', sunday: false }, o);
   }
@@ -329,7 +318,7 @@
 
   // ------------------------------------------------------------------ kỷ luật phụng vụ
   const HOLY_DAYS = { '1-1': 1, '12-25': 1, '8-15': 1, '11-1': 1 };
-  function discipline(Y, n, tem, winner) {
+  function discipline(Y, n, winner) {
     const c = civ(n), out = [];
     const ashDay = Y.ashCelebration === n;
     if (ashDay || n === Y.goodFri) out.push({ type: 'fast', label: 'Ăn chay' }, { type: 'abstinence', label: 'Kiêng thịt' });
@@ -372,7 +361,6 @@
     const notes = [];
     const cands = [];
     const moved = [];     // lễ trọng dời đi khỏi hôm nay
-    const prefer = [];    // nhãn "dời đến hôm nay"
 
     // 1. cử hành mùa
     const temC = Object.assign({}, tem);
@@ -502,7 +490,7 @@
       moved: moved.length ? moved : null,
       ashTransferred: Y.ashTransferred && (n === Y.ash || n === Y.ashCelebration)
     };
-    info.discipline = discipline(Y, n, tem, winner);
+    info.discipline = discipline(Y, n, winner);
     // Được phép kính trọng thể vào Chúa Nhật (để giáo dân tham dự): Chúa Nhật vẫn là cử hành chính.
     if (w === 0 && winner === temC) {
       if (n === Y.vnMartyrs) info.solemnOption = { name: 'Các Thánh Tử Đạo Việt Nam (kính trọng thể)', code: OWN_CODES.martyrs, color: 'red', colorName: COLOR_NAME.red, note: 'Kính trọng thể Các Thánh Tử Đạo Việt Nam (lễ Quan Thầy Giáo hội Việt Nam, 24/11) vào Chúa Nhật trước ngày 24/11 [HĐGM Việt Nam, khóa họp tháng 4-1991; Thông báo 01/01/1992]. Phụng vụ Lời Chúa: chọn trong số lễ chung kính các thánh tử đạo.' };
@@ -543,8 +531,6 @@
     }
     return Math.floor((n - firstSun) / 7) + 1;
   }
-
-  function weekKey(n) { return n; }
 
   return {
     setSanctoral, day, monthGrid, yearData, sundayIndex,

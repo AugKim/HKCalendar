@@ -56,7 +56,6 @@
         return { sets };
       }
       let data = null;
-      const isSundayCode = /^(10|30|40|50)\d0$/.test(code) && (code[0] !== '5' || Number(code.slice(1, 3)) <= 34) || SUNDAY_DIRECT.has(code) || SUNDAY_ALIAS[code];
       if (info.sunday || SUNDAY_ALIAS[code] || SUNDAY_DIRECT.has(code)) data = sundaySet(code, cycle);
       if (!data && code === '8441') data = g('OptionsaintReadings')['8441'] || g('READINGS_SPECIAL')['8441'];
       if (!data && code[0] === '5' && code.length === 4 && Number(code.slice(1, 3)) <= 34 && code[3] !== '0') {
@@ -64,7 +63,6 @@
       }
       if (!data) data = g('READINGS_SEASONAL')[code];
       if (!data) data = g('READINGS_SPECIAL')[code];
-      if (!data && info.sunday) data = sundaySet(code, cycle);
       if (!data && D) {
         const yrs = info.sunday ? [cycle, '0'] : [wc, '0'];
         data = fromSummary(summaryOne(code, yrs));
@@ -105,27 +103,23 @@
       const otWeekday = /^5\d{2}[1-6]$/.test(tc) && Number(tc.slice(1, 3)) <= 34;
       const temKey = 'T' + tc + (sundayLike ? '-' + info.cycle : otWeekday ? '-' + info.weekdayCycle : '');
       const mk = (pre, code) => (code ? { medKey: pre + code } : {});
+      const one = data => (data ? [{ label: null, data }] : null);   // một bộ bài đọc, không nhãn
       const temLabel = 'Bài đọc theo mùa';
       const SP = g('READINGS_SPECIAL');
 
       // 1. Tết
       const tetCode = info.tet && info.tet.day ? ({ 1: '70001', 2: '70002', 3: '70003' })[info.tet.day] : (info.tet && info.tet.midAutumn ? '70815' : null);
-      const tetTab = tetCode ? [{ label: null, data: SP[tetCode] || fromSummary(summaryOne(tetCode, ['0'])) }] : null;
+      const tetTab = tetCode ? one(SP[tetCode] || fromSummary(summaryOne(tetCode, ['0']))) : null;
 
       // 2. Lễ thánh (7DDMM) — bậc cao thì đặt trước; lễ dời dùng mã riêng
       const sancWins = (prim.kind === 'sanctoral' || prim.kind === 'movable') && !!prim.code && prim.code !== info.code;
       const sancCode = sancWins ? prim.code : (prim.kind === 'movable' ? null : info.sanctoralCode);
-      const sanc = sancoralSafe(sancCode, info);
-
-      function sancoralSafe(code, inf) {
-        const d = sanctoralSet(code, inf.sunday, inf.cycle);
-        return d ? [{ label: null, data: d }] : null;
-      }
+      const sanc = one(sanctoralSet(sancCode, info.sunday, info.cycle));
 
       const ownOpt = optionSet(info.optionCode);
       const optData = ownOpt || (prim.code === '8441' ? optionSet('8441') : null);
       const optKey = ownOpt ? info.optionCode : '8441';
-      const opt = optData ? [{ label: null, data: optData }] : null;
+      const opt = one(optData);
 
       const vigilSets = info.vigil ? [{ label: info.vigil.name, data: SP[info.vigil.code] || fromSummary(summaryOne(info.vigil.code, ['V', '0'])) }] : null;
 

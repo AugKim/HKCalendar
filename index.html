@@ -44,6 +44,9 @@
         <button id="fontDec" aria-label="Giảm cỡ chữ">A−</button>
         <button id="fontInc" aria-label="Tăng cỡ chữ">A+</button>
       </div>
+      <button class="icon-btn" id="btnSearch" aria-label="Tìm lễ" title="Tìm lễ (phím /)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      </button>
       <button class="btn" id="btnExport" title="Xuất lịch">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3"/></svg>
         <span class="hide-sm">Xuất lịch</span>
@@ -102,6 +105,15 @@
         <button class="btn btn-primary" value="pdf" id="exPdf">In / Lưu PDF</button>
       </footer>
     </form>
+  </dialog>
+
+  <dialog id="searchDlg" class="dlg dlg-search" aria-labelledby="searchTitle">
+    <header><h3 id="searchTitle">Tìm lễ</h3><button type="button" class="icon-btn" id="searchClose" aria-label="Đóng">✕</button></header>
+    <div class="srch-bar">
+      <input type="search" id="searchQ" placeholder="Ví dụ: Phêrô, Tết, Lễ Tro…" autocomplete="off" aria-label="Tên lễ cần tìm">
+      <div class="srch-year"><button type="button" class="icon-btn" data-sy="-1" aria-label="Năm trước">‹</button><span id="searchYear"></span><button type="button" class="icon-btn" data-sy="1" aria-label="Năm sau">›</button></div>
+    </div>
+    <ul id="searchRes" class="srch-res" aria-live="polite"></ul>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
